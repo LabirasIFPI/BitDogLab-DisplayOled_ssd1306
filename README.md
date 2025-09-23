@@ -20,59 +20,66 @@ Esta seção é um guia direto para integrar a biblioteca do display SSD1306 em 
 
 >O display OLED SSD1306 utiliza o protocolo I2C. Certifique-se de usar pinos do Raspberry Pi Pico que sejam compatíveis com a função I2C e que o barramento (`i2c0` ou `i2c1`) seja inicializado corretamente no software.
 
-### 1.2. Adicionando a Biblioteca (Git Submodule)
+### **1.2. Adicionando a Biblioteca**
 
-Para que o projeto funcione, ele depende da biblioteca `pico-ssd1306`. A maneira recomendada de adicioná-la é como um **submódulo do Git**, o que garante que você possa facilmente obter atualizações da biblioteca original.
+Para que o projeto funcione, ele depende da biblioteca `pico-ssd1306`. A maneira moderna e recomendada de gerenciar dependências como esta é usando o módulo `FetchContent` do CMake. Ele automatiza o download e a integração da biblioteca durante a configuração do projeto, eliminando a necessidade de submódulos Git ou downloads manuais.
 
-Na raiz do seu projeto, execute o seguinte comando no terminal:
+### **1.3. Integração dos Arquivos**
 
-```bash
-git submodule add https://github.com/daschr/pico-ssd1306 lib/pico-ssd1306
+Ao usar `FetchContent`, a estrutura de arquivos do seu projeto fica mais limpa.  O  CMake cuidará de baixar e gerenciar esses arquivos em um diretório temporário dentro da sua pasta de compilação (`build/`).
+
+> Sua estrutura de projeto pode se concentrar apenas nos seus arquivos de aplicação:
+> 
+
+```Makefile
+meu_projeto/
+|
+├── inc/
+│   ├── display.h
+│   └── ...
+├── src/
+│   ├── display.c
+│   ├── main.c
+│   └── ...
+└── CMakeLists.txt
 ```
-
-Este comando irá clonar a biblioteca para a pasta `lib/pico-ssd1306` e criar um arquivo `.gitmodules` que rastreia a versão exata da biblioteca utilizada no seu projeto.
-
-### 1.3. Integração dos Arquivos
-
-Com a biblioteca adicionada, a estrutura de arquivos do seu projeto deve conter:
-
-1. **Biblioteca Principal (via Submódulo):**
-    - `lib/pico-ssd1306/ssd1306.h`
-    - `lib/pico-ssd1306/ssd1306.c`
-2. **Módulo de Abstração (Opcional, mas recomendado):**
-    - `display.h` no seu diretório de cabeçalhos (`inc/`).
-    - `display.c` no seu diretório de código-fonte (`src/`).
 
 ### 1.4. Configuração do Build (CMakeLists.txt)
 
-Para que o SDK do Pico compile seu projeto, adicione os fontes da biblioteca e do seu módulo de display, além da dependência `hardware_i2c` ao arquivo `CMakeLists.txt`.
+Para que o SDK do Pico compile seu projeto e inclua a biblioteca `pico-ssd1306` automaticamente, você deve adicionar o seguinte bloco de código ao seu `CMakeLists.txt`, logo após a função `pico_sdk_init()`.
 
-**Adicionar os arquivos fonte:**
+Adicione o seguinte bloco de código ao seu `CMakeLists.txt`, preferencialmente logo após a linha `pico_sdk_init()`:
 
-```c
-add_executable(meu_projeto
-    main.c
-    src/display.c
-    lib/pico-ssd1306/ssd1306.c // ADICIONE ESTÁ LINHA AOS EXECUTAVÉS
-    # ... outros arquivos .c
+```makefile
+# ======================= FETCHCONTENT PARA SSD1306 =======================
+# PASSO 1: Habilitar o módulo FetchContent
+include(FetchContent)
+
+# PASSO 2: Declarar os detalhes da dependência
+FetchContent_Declare(
+    pico_ssd1306
+    GIT_REPOSITORY https://github.com/daschr/pico-ssd1306.git
+    GIT_TAG        main # Ou um commit hash para estabilidade
 )
+
+# PASSO 3: Baixar e disponibilizar o conteúdo
+FetchContent_MakeAvailable(pico_ssd1306)
+
+# PASSO 4: Criar um alvo de biblioteca para a dependência
+add_library(ssd1306_lib INTERFACE)
+target_include_directories(ssd1306_lib INTERFACE ${pico_ssd1306_SOURCE_DIR})
+target_sources(ssd1306_lib INTERFACE ${pico_ssd1306_SOURCE_DIR}/ssd1306.c)
+# ===============================================================================
 ```
 
-**Adicionar a biblioteca de hardware:**
+Após definir o bloco `FetchContent`, o passo final é instruir o CMake a usar a nova biblioteca `ssd1306_lib` ao compilar seu executável principal:
 
-```c
-target_link_libraries(meu_projeto
-    pico_stdlib
+```Makefile
+# Adiciona as bibliotecas necessárias para o Pico e o display
+target_link_libraries(main
     hardware_i2c
-)
-```
-
-Adicione o diretório da biblioteca como destino de inclusão:
-
-```c
-target_include_directories(main PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}
-    ${CMAKE_CURRENT_LIST_DIR}/lib/pico-ssd1306 // ADICIONE ESTÁ LINHA
+    pico_stdlib
+    ssd1306_lib  
 )
 ```
 
